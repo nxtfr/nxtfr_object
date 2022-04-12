@@ -1,2 +1,0 @@
--module(nxtfr_object_riak).
--author("christian@flodihn.se").

@@ -7,6 +7,8 @@
 %% External exports
 -export([
     start_link/0,
+    create_cluster/0,
+    join_cluster/1,
     create_registry/1,
     create_registry/2,
     join_registry/2,
@@ -27,6 +29,14 @@
 -spec start_link() -> {ok, Pid :: pid()}.
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+-spec create_cluster() -> {ok, created}.
+create_cluster() ->
+    gen_server:call(?MODULE, create_cluster).
+
+-spec join_cluster(Node :: atom()) -> {ok, joined}.
+join_cluster(Node) ->
+    gen_server:call(?MODULE, {join_cluster, Node}).
 
 -spec create_registry(RegistryName :: atom()) -> {ok, created}.
 create_registry(RegistryName) ->
@@ -59,8 +69,16 @@ query(Uid, RegistryName) ->
 -spec init([]) -> {ok, []}.
 init([]) ->
     mnesia:start(),
-    mnesia:change_table_copy_type(schema, node(), disc_copies),
     {ok, []}.
+
+handle_call(create_cluster, _From, State) ->
+    mnesia:change_table_copy_type(schema, node(), disc_copies),
+    {reply, ok, State};
+
+handle_call({join_cluster, Node}, _From, State) ->
+    {atomic, ok} = mnesia:change_config(extra_db_nodes, [Node]),
+    {atomic, ok} = mnesia:change_table_copy_type(schema, node(), disc_copies),
+    {reply, ok, State};
 
 handle_call({create_registry, RegistryType, RegistryName}, _From, State) ->
     case RegistryType of
@@ -79,7 +97,6 @@ handle_call({create_registry, RegistryType, RegistryName}, _From, State) ->
     {reply, ok, State};
 
 handle_call({join_registry, Node, RegistryName}, _From, State) ->
-    mnesia:change_config(extra_db_nodes, [Node]),
     rpc:call(Node, mnesia, add_table_copy, [RegistryName, node(), ram_copies]),
     {reply, ok, State};
 
