@@ -3,6 +3,9 @@
 -behaviour(gen_server).
 
 -record(obj, {uid, state}).
+-record(state, {storage_module, storage_state}).
+
+-type registry_options() :: [{type, local | shared} | {storage, memory | disc }].
 
 %% External exports
 -export([
@@ -15,7 +18,9 @@
     destroy_registry/1,
     register/3,
     unregister/2,
-    query/2]).
+    query/2,
+    save/3,
+    load/2]).
 
 %% gen_server callbacks
 -export([
@@ -40,11 +45,11 @@ join_cluster(Node) ->
 
 -spec create_registry(RegistryName :: atom()) -> {ok, created}.
 create_registry(RegistryName) ->
-    create_registry(RegistryName, shared).
+    create_registry(RegistryName, [{type, shared}, {storage, disc}]).
 
--spec create_registry(RegistryName :: atom(), RegistryType :: local | shared) -> {ok, created}.
-create_registry(RegistryName, RegistryType) ->
-    gen_server:call(?MODULE, {create_registry, RegistryType, RegistryName}).
+-spec create_registry(RegistryName :: atom(), RegistryOptions :: registry_options()) -> {ok, created}.
+create_registry(RegistryName, RegistryOptions) ->
+    gen_server:call(?MODULE, {create_registry, RegistryName, RegistryOptions}).
 
 -spec join_registry(Node :: atom(), RegistryName :: atom()) -> {ok, joined}.
 join_registry(Node, RegistryName) ->
@@ -66,34 +71,33 @@ unregister(Uid, RegistryName) ->
 query(Uid, RegistryName) ->
     gen_server:call(?MODULE, {query, Uid, RegistryName}).
 
+-spec save(Uid :: binary(), ObjState :: any(), Storage :: atom()) -> {ok, saved}.
+save(Uid, ObjState, Storage) ->
+    gen_server:call(?MODULE, {save, Uid, ObjState, Storage}).
+
+-spec load(Uid :: binary(), Storage :: atom()) -> {ok, ObjState :: any() | {error, not_found}}.
+load(Uid, Storage) ->
+    gen_server:call(?MODULE, {load, Uid, Storage}).
+
 -spec init([]) -> {ok, []}.
 init([]) ->
     mnesia:start(),
-    {ok, []}.
+    {ok, StorageModule} = application:get_env(storage_module),
+    {ok, StorageState} = StorageModule:init(),
+    {ok, #state{storage_module = StorageModule, storage_state = StorageState}}.
 
 handle_call(create_cluster, _From, State) ->
     mnesia:change_table_copy_type(schema, node(), disc_copies),
     {reply, ok, State};
 
 handle_call({join_cluster, Node}, _From, State) ->
-    {atomic, ok} = mnesia:change_config(extra_db_nodes, [Node]),
+    {ok, _} = mnesia:change_config(extra_db_nodes, [Node]),
     {atomic, ok} = mnesia:change_table_copy_type(schema, node(), disc_copies),
     {reply, ok, State};
 
-handle_call({create_registry, RegistryType, RegistryName}, _From, State) ->
-    case RegistryType of
-        local ->
-            mnesia:create_table(RegistryName, [
-                {ram_copies, [node()]},
-                {record_name, obj},
-                {attributes, record_info(fields, obj)},
-                {local_content, true}]);
-        shared ->
-            mnesia:create_table(RegistryName, [
-                {ram_copies, [node()]},
-                {record_name, obj},
-                {attributes, record_info(fields, obj)}])
-    end,
+handle_call({create_registry, RegistryName, RegistryOptions}, _From, State) ->
+    MnesiaOptions = parse_registry_options(RegistryOptions),
+    mnesia:create_table(RegistryName, MnesiaOptions),
     {reply, ok, State};
 
 handle_call({join_registry, Node, RegistryName}, _From, State) ->
@@ -136,6 +140,26 @@ handle_call({query, Uid, RegistryName}, _From, State) ->
         aborted:Reason -> {reply, {error, Reason}, State}
     end;
 
+handle_call({save, Uid, ObjState, Storage}, _From, #state{
+        storage_module = StorageModule,
+        storage_state = StorageState} = State) ->
+    case StorageModule:save(Uid, ObjState, Storage, StorageState) of
+        {ok, saved} ->
+            {reply, {ok, saved}, State};
+        {error, not_found} ->
+            {reply, {error, not_found}, State}
+    end;
+
+handle_call({load, Uid, Storage}, _From, #state{
+        storage_module = StorageModule,
+        storage_state = StorageState} = State) ->
+    case StorageModule:load(Uid, Storage, StorageState) of
+        {ok, ObjState} ->
+            {reply, {ok, ObjState}, State};
+        {error, not_found} ->
+            {reply, {error, not_found}, State}
+    end;
+
 handle_call(Call, _From, State) ->
     error_logger:error_report([{undefined_call, Call}]),
     {reply, ok, State}.
@@ -153,3 +177,24 @@ code_change(_OldVsn, State, _Extra) ->
 
 terminate(_Reason, _State) ->
     ok.
+
+parse_registry_options(RegistryOptions) ->
+    BaseOptions = [
+        {record_name, obj},
+        {attributes, record_info(fields, obj)}],
+    parse_registry_options(RegistryOptions, BaseOptions).
+
+parse_registry_options([], Acc) ->
+    Acc;
+
+parse_registry_options([{type, Type} | Rest], Acc) ->
+    case Type of
+        local -> parse_registry_options(Rest, lists:append([{local_content, true}], Acc));
+        shared -> parse_registry_options(Rest, Acc)
+    end;
+
+parse_registry_options([{storage, Storage} | Rest], Acc) ->
+    case Storage of
+        memory -> parse_registry_options(Rest, lists:append([{ram_copies, [node()]}], Acc));
+        disc -> parse_registry_options(Rest, lists:append([{disc_copies, [node()]}], Acc))
+    end.
