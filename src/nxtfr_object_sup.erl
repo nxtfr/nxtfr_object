@@ -24,5 +24,12 @@ init([]) ->
         start => {nxtfr_object, start_link, []},
         type => worker
     },
-    ChildSpecs = [NxtfrObject],
+
+    NxtfrObjectActiveObjSup = #{
+        id => next_object_activeobj_sup,
+        start => {nxtfr_object_activeobj_sup, start_link, []},
+        type => supervisor
+    },
+
+    ChildSpecs = [NxtfrObject, NxtfrObjectActiveObjSup],
     {ok, {SupFlags, ChildSpecs}}.

@@ -20,7 +20,9 @@
     unregister/2,
     query/2,
     save/3,
-    load/2]).
+    load/2,
+    activate/2,
+    deactivate/2]).
 
 %% gen_server callbacks
 -export([
@@ -78,6 +80,14 @@ save(Uid, ObjState, Storage) ->
 -spec load(Uid :: binary(), Storage :: atom()) -> {ok, ObjState :: any() | {error, not_found}}.
 load(Uid, Storage) ->
     gen_server:call(?MODULE, {load, Uid, Storage}).
+
+-spec activate(Uid :: binary(), Storage :: atom()) -> {ok, ObjState :: any() | {error, not_found}}.
+activate(Uid, Storage) ->
+    gen_server:call(?MODULE, {activate, Uid, Storage}).
+
+-spec deactivate(Uid :: binary(), Storage :: atom()) -> {ok, ObjState :: any() | {error, not_found}}.
+deactivate(Uid, Storage) ->
+    gen_server:call(?MODULE, {deactivate, Uid, Storage}).
 
 -spec init([]) -> {ok, []}.
 init([]) ->
