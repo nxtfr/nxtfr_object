@@ -7,7 +7,7 @@
 -author("christian@flodihn.se").
 -behaviour(supervisor).
 
--export([start/1, stop/1]).
+-export([start/2, stop/1]).
 -export([start_link/0]).
 -export([init/1]).
 
@@ -31,8 +31,8 @@ init([]) ->
 
 %% external functions
 
-start(ObjState) ->
-    supervisor:start_child(?MODULE, [ObjState]).
+start(CallbackModule, ObjState) ->
+    supervisor:start_child(?MODULE, [CallbackModule, ObjState]).
 
 stop(ChildPid) ->
     supervisor:terminate_child(?MODULE, ChildPid).
