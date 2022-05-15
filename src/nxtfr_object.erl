@@ -2,10 +2,10 @@
 -author("christian@flodihn.se").
 -behaviour(gen_server).
 
--record(obj, {uid, state}).
+-record(obj, {uid, pid, state}).
 -record(state, {storage_module, storage_state}).
 
--type registry_options() :: [{type, local | shared} | {storage, memory | disc }].
+-type registry_options() :: [{type, local | shared} | {storage, memory | disc}].
 
 %% External exports
 -export([
@@ -21,7 +21,7 @@
     query/2,
     save/3,
     load/2,
-    activate/2,
+    activate/3,
     deactivate/2]).
 
 %% gen_server callbacks
@@ -81,9 +81,9 @@ save(Uid, ObjState, Storage) ->
 load(Uid, Storage) ->
     gen_server:call(?MODULE, {load, Uid, Storage}).
 
--spec activate(Uid :: binary(), Storage :: atom()) -> {ok, ObjState :: any() | {error, not_found}}.
-activate(Uid, Storage) ->
-    gen_server:call(?MODULE, {activate, Uid, Storage}).
+-spec activate(Uid :: binary(), CallbackModule :: atom(), Storage :: atom()) -> {ok, ObjState :: any() | {error, not_found}}.
+activate(Uid, CallbackModule, Storage) ->
+    gen_server:call(?MODULE, {activate, Uid, CallbackModule, Storage}).
 
 -spec deactivate(Uid :: binary(), Storage :: atom()) -> {ok, ObjState :: any() | {error, not_found}}.
 deactivate(Uid, Storage) ->
@@ -170,6 +170,23 @@ handle_call({load, Uid, Storage}, _From, #state{
             {reply, {error, not_found}, State}
     end;
 
+handle_call({activate, Uid, CallbackModule, Storage}, _From, #state{
+        storage_module = StorageModule,
+        storage_state = StorageState} = State) ->
+    case StorageModule:load(Uid, Storage, StorageState) of
+        {error, not_found} ->
+            ObjState = maps:new(),
+            {ok, Pid} = nxtfr_object_activeobj_sup:start(CallbackModule, ObjState),
+            {atomic, ok} = write_active_pid(Uid, Pid, Storage),
+            {reply, {ok, ObjState}, State};
+        {ok, ObjState} ->
+            {ok, Pid} = nxtfr_object_activeobj_sup:start(CallbackModule, ObjState),
+            {atomic, ok} = write_active_pid(Uid, Pid, Storage),
+            {reply, {ok, ObjState}, State};
+        {error, not_found} ->
+            {reply, {error, not_found}, State}
+    end;
+
 handle_call(Call, _From, State) ->
     error_logger:error_report([{undefined_call, Call}]),
     {reply, ok, State}.
@@ -208,3 +225,10 @@ parse_registry_options([{storage, Storage} | Rest], Acc) ->
         memory -> parse_registry_options(Rest, lists:append([{ram_copies, [node()]}], Acc));
         disc -> parse_registry_options(Rest, lists:append([{disc_copies, [node()]}], Acc))
     end.
+
+write_active_pid(Uid, Pid, RegistryName) ->
+    [#obj{state = ObjState}] = mnesia:dirty_read(RegistryName, Uid),
+    WriteFun = fun() -> 
+        mnesia:write(RegistryName, #obj{uid = Uid, pid = Pid, state = ObjState}, write)
+    end,
+    mnesia:transaction(WriteFun).

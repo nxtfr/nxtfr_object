@@ -21,23 +21,28 @@ start_link(CallbackModule, ObjState) ->
 
 -spec init(InitParameters :: list()) -> {ok, #state{}}.
 init([CallbackModule, ObjState]) ->
+    io:format("Activated object ~p.~n", [CallbackModule]),
     {ok, #state{callback_module = CallbackModule, obj_state = ObjState}}.
 
-handle_call(Call, _From, State) ->
-    error_logger:error_report([{undefined_call, Call}]),
+handle_call(Event, _From, #state{callback_module = CallbackModule, obj_state = ObjState} = State) ->
+    CallbackModule:on_event(Event, ObjState),
+    %error_logger:error_report([{undefined_call, Call}]),
     {reply, ok, State}.
 
-handle_cast(Cast, State) ->
-    error_logger:error_report([{undefined_cast, Cast}]),
+handle_cast(Event, #state{callback_module = CallbackModule, obj_state = ObjState} = State) ->
+    CallbackModule:on_event(Event, ObjState),
+    %error_logger:error_report([{undefined_cast, Cast}]),
     {noreply, State}.
 
-handle_info(Info, #state{callback_module = CallbackModule, obj_state = ObjState} = State) ->
-    case CallbackModule:handle_info(Info, ObjState) of
-        ok ->
-            {noreply, State};
-        {ok, NewObjState} ->
-            {noreply, State#state{obj_state = NewObjState}}
-    end.
+handle_info(Event, #state{callback_module = CallbackModule, obj_state = ObjState} = State) ->
+    %case CallbackModule:on_event(Info, ObjState) of
+    %    ok ->
+    %        {noreply, State};
+    %    {ok, NewObjState} ->
+    %        {noreply, State#state{obj_state = NewObjState}}
+    %end.
+    CallbackModule:on_event(Event, ObjState),
+    {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
