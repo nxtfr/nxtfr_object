@@ -7,7 +7,7 @@
 -author("christian@flodihn.se").
 -behaviour(supervisor).
 
--export([start/2, stop/1]).
+-export([start/5, stop/1]).
 -export([start_link/0]).
 -export([init/1]).
 
@@ -21,9 +21,11 @@ init([]) ->
                  intensity => 10,
                  period => 1},
 
+    {ok, ActiveObjectModule} = application:get_env(active_object_module),
+
     NxtfrObjectActiveObj = #{
-        id => nxtfr_object_activeobj,
-        start => {nxtfr_object_activeobj, start_link, []},
+        id => ActiveObjectModule,
+        start => {ActiveObjectModule, start_link, []},
         restart => transient},
 
     ChildSpecs = [NxtfrObjectActiveObj],
@@ -31,8 +33,8 @@ init([]) ->
 
 %% external functions
 
-start(CallbackModule, ObjState) ->
-    supervisor:start_child(?MODULE, [CallbackModule, ObjState]).
+start(Uid, CallbackModule, ObjState, Registry, TickFrequency) ->
+    supervisor:start_child(?MODULE, [Uid, CallbackModule, ObjState, Registry, TickFrequency]).
 
 stop(ChildPid) ->
     supervisor:terminate_child(?MODULE, ChildPid).
