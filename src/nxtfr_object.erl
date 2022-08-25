@@ -397,6 +397,9 @@ write_storage(Uid, ObjState, Registry, #state{
         {error, not_found} -> {error, not_found}
     end.
 
+set_tick_frequency(_Uid, _Pid, 0, _Registry) ->
+    ok;
+
 set_tick_frequency(Uid, Pid, TickFrequency, Registry) ->
     case mnesia:dirty_read(?TICK_LOOKUP_TABLE, TickFrequency) of
         [] ->
@@ -424,13 +427,21 @@ frequency_to_table_id(TickFrequency) ->
     list_to_atom("nxtfr_tick_frequency_" ++ integer_to_list(TickFrequency)).
 
 init_tick_procs() ->
-    init_tick_procs(mnesia:dirty_first(?TICK_LOOKUP_TABLE)).
+    case lists:member(?TICK_LOOKUP_TABLE, mnesia:system_info(tables)) of
+        true ->
+            init_tick_procs(mnesia:dirty_first(?TICK_LOOKUP_TABLE));
+        false ->
+            error_logger:warning_msg(
+                "Table ~p not found during init, call nxtfr_object:create_cluster to create it.",
+                [?TICK_LOOKUP_TABLE])
+    end.
 
 init_tick_procs('$end_of_table') ->
     done;
 
 init_tick_procs(Key) ->
-    [#tick_lookup{frequency = TickFrequency, table_name = TableName}] = mnesia:dirty_read(?TICK_LOOKUP_TABLE, Key),
+    [#tick_lookup{frequency = TickFrequency, table_name = TableName}] = mnesia:dirty_read(
+        ?TICK_LOOKUP_TABLE, Key),
     start_tick_proc(TableName, TickFrequency),
     init_tick_procs(mnesia:dirty_next(?TICK_LOOKUP_TABLE, Key)).
 
