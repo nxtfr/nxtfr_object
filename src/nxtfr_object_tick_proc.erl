@@ -55,10 +55,14 @@ tick(TableName, Key, LastTick) ->
     case mnesia:dirty_read(TableName, Key) of
         [#tick_obj{uid = Uid, pid = undefined, registry = Registry}] ->
             {ok, Pid} = nxtfr_object:activate(Uid, Registry),
-            nxtfr_gen_object:handle_tick(Pid, LastTick),
+            %% Disable ticking until I figure out how I implemented this feature.
+            %nxtfr_gen_object:tick(Pid, LastTick),
             mnesia:dirty_delete(TableName, Uid);
         [{_Uid, Pid, _Registry}] ->
-            nxtfr_object_activeobj:tick(Pid, LastTick)
+            %% Disable ticking until I figure out how I implemented this feature.
+            %{ok, ActiveObjectModule} = application:get_env(active_object_module),
+            %ActiveObjectModule:tick(Pid, LastTick)
+            pass
     end,
     ?MODULE:tick(TableName, mnesia:dirty_next(TableName, Key), LastTick).
 

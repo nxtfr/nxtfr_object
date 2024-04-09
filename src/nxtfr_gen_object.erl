@@ -52,19 +52,19 @@ loop(Module, ObjState, State, TickFrequency, LastTick) ->
     TimeUntilNextTick = time_until_next_tick(TickFrequency, LastTick),
     receive
         {handle_event, Event} ->
-            {ok, NewObjState} = Module:handle_event(Event, ObjState, State),
-            {ok, NewObjState2, TickedState, NewLastTick} = tick(Module, NewObjState, State, TickFrequency, LastTick),
+            {ok, NewObjState, NewState} = Module:handle_event(Event, ObjState, State),
+            {ok, NewObjState2, TickedState, NewLastTick} = tick(Module, NewObjState, NewState, TickFrequency, LastTick),
             nxtfr_gen_object:loop(Module, NewObjState2, TickedState, TickFrequency, NewLastTick);
         {handle_sync_event, From, Event, Ref} ->
-            {ok, Reply, NewObjState} = Module:handle_sync_event(Event, ObjState, State),
+            {ok, Reply, NewObjState, NewState} = Module:handle_sync_event(Event, ObjState, State),
             From ! {Ref, Reply},
-            {ok, NewObjState2, TickedState, NewLastTick} = tick(Module, NewObjState, State, TickFrequency, LastTick),
+            {ok, NewObjState2, TickedState, NewLastTick} = tick(Module, NewObjState, NewState, TickFrequency, LastTick),
             nxtfr_gen_object:loop(Module, NewObjState2, TickedState, TickFrequency, NewLastTick);
         stop ->
             Module:stop(ObjState, State);
         Info ->
-            {ok, NewObjState} = Module:handle_info(Info, ObjState, State),
-            {ok, NewObjState2, TickedState, NewLastTick} = tick(Module, NewObjState, State, TickFrequency, LastTick),
+            {ok, NewObjState, NewState} = Module:handle_info(Info, ObjState, State),
+            {ok, NewObjState2, TickedState, NewLastTick} = tick(Module, NewObjState, NewState, TickFrequency, LastTick),
             nxtfr_gen_object:loop(Module, NewObjState2, TickedState, TickFrequency, NewLastTick)
     after TimeUntilNextTick ->
         {ok, NewObjState, TickedState, NewLastTick} = tick(Module, ObjState, State, TickFrequency, LastTick),

@@ -26,7 +26,7 @@
     load/2,
     load_existing/2,
     activate/2,
-    activate/4,
+    activate/3,
     deactivate/2,
     send_event/3]).
 
@@ -99,9 +99,9 @@ load_existing(Uid, Storage) ->
 activate(Uid, Registry) ->
     gen_server:call(?MODULE, {activate, Uid, Registry}).
 
--spec activate(Uid :: binary(), Registry :: atom(), CallbackModule :: atom(), DeepState :: map()) -> {ok, ObjState :: any()} | {error, not_found} | {error, registry_not_found}.
-activate(Uid, Registry, CallbackModule, DeepState) ->
-    gen_server:call(?MODULE, {activate, Uid, Registry, CallbackModule, DeepState}).
+-spec activate(Uid :: binary(), Registry :: atom(), DeepState :: map()) -> {ok, ObjState :: any()} | {error, not_found} | {error, registry_not_found}.
+activate(Uid, Registry, DeepState) ->
+    gen_server:call(?MODULE, {activate, Uid, Registry, DeepState}).
 
 -spec deactivate(Uid :: binary(), Registry :: atom()) -> {ok, ObjState :: any()} | {error, not_found}.
 deactivate(Uid, Registry) ->
@@ -154,6 +154,7 @@ handle_call({join_registry, Node, RegistryName}, _From, State) ->
     {reply, ok, State};
 
 handle_call({register, Uid, CallbackModule, TickFrequency, ObjState, Registry}, _From, State) ->
+    error_logger:info_msg("~p:register uid: ~p registry: ~p", [Uid, Registry]),
     case write_registry(Uid, CallbackModule, TickFrequency, ObjState, Registry) of
         ok ->
             Pid = undefined,
@@ -237,9 +238,9 @@ handle_call({activate, Uid, Registry}, _From, State) ->
     {ok, Pid, UpdatedState} = activate_object(Uid, Registry, State),
     {reply, {ok, Pid}, UpdatedState};
 
-handle_call({activate, Uid, Registry, CallbackModule, ObjState}, _From, State) ->
-    {ok, Pid} = nxtfr_object_activeobj_sup:start(Uid, CallbackModule, ObjState, Registry, nil),
-    {reply, {ok, Pid}, State};
+handle_call({activate, Uid, Registry, ObjState}, _From, State) ->
+    {ok, Pid, UpdatedState} = activate_object(Uid, Registry, ObjState, State),
+    {reply, {ok, Pid}, UpdatedState};
 
 handle_call({deactivate, Uid, Registry}, _From, State) ->
     ok = deactivate_object(Uid, Registry),
@@ -310,18 +311,28 @@ parse_registry_options([{storage, Storage} | Rest], Acc) ->
 
 activate_object(Uid, Registry, State) ->
     ObjState = read_object_storage(Uid, Registry, State),
-    [#active_obj{
-        callback_module = CallbackModule,
-        tick_frequency = TickFrequency
-    } = Obj] = mnesia:dirty_read(Registry, Uid),
-    {ok, Pid} = nxtfr_object_activeobj_sup:start(Uid, CallbackModule, ObjState, Registry, TickFrequency),
-    unset_tick_frequency(Uid, TickFrequency),
-    WriteFun = fun() -> 
-        mnesia:write(Registry, Obj#active_obj{pid = Pid}, write),
-        Pid
-    end,
-    mnesia:transaction(WriteFun),
-    {ok, Pid, State}.
+    activate_object(Uid, Registry, ObjState, State).
+
+activate_object(Uid, Registry, ObjState, State) ->
+    case mnesia:dirty_read(Registry, Uid) of
+        [] ->
+            error_logger:error_report({activate_object, "Failed to read from registry", Uid, Registry}),
+            {error, uid_not_found};
+        [#active_obj{
+                callback_module = CallbackModule,
+                tick_frequency = TickFrequency} = Obj] ->
+        {ok, Pid} = nxtfr_object_activeobj_sup:start(Uid, CallbackModule, ObjState, Registry, TickFrequency),
+        case is_integer(TickFrequency) of
+            true -> unset_tick_frequency(Uid, TickFrequency);
+            false -> pass
+        end,
+        WriteFun = fun() -> 
+            mnesia:write(Registry, Obj#active_obj{pid = Pid}, write),
+            Pid
+        end,
+        mnesia:transaction(WriteFun),
+        {ok, Pid, State}
+    end.
 
 deactivate_object(Uid, Registry) ->
     case mnesia:dirty_read(Registry, Uid) of
