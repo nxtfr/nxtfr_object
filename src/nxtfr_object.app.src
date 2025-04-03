@@ -9,8 +9,9 @@
    ]},
   {env, [
     {riak_options, [{host, "127.0.0.1"}, {port, 8087}, {queue_if_disconnected, true}]},
-    {storage_module, nxtfr_object_riak},
-    {active_object_module, ao_object}
+    {mnesia_options, []},
+    {storage_module, nxtfr_object_mnesia},
+    {active_object_module, undefined}
   ]},
   {modules, []},
   {licenses, ["MIT"]},
