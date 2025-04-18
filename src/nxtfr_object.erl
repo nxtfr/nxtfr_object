@@ -154,7 +154,6 @@ handle_call({join_registry, Node, RegistryName}, _From, State) ->
     {reply, ok, State};
 
 handle_call({register, Uid, CallbackModule, TickFrequency, ObjState, Registry}, _From, State) ->
-    error_logger:info_msg("~p:register uid: ~p registry: ~p", [Uid, Registry]),
     case write_registry(Uid, CallbackModule, TickFrequency, ObjState, Registry) of
         ok ->
             Pid = undefined,
