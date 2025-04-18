@@ -4,7 +4,7 @@
 -record(mnesia_state, {}).
 -type mnesia_state() :: #mnesia_state{}.
 
--record(object_store, {uid, obj_state}).
+-record(nxtfr_object_store, {uid, obj_state}).
 -define(PUT_ARGS, [{w, 1}, {dw, 1}]).
 
 -export([
@@ -16,6 +16,7 @@
 -spec init() -> {ok, MnesiaState :: mnesia_state()}.
 init() ->
     mnesia:start(),
+    create_table(nxtfr_object_store),
     {ok, #mnesia_state{}}.
 
 -spec create_table(TableName :: atom) -> ok | {error, Reason :: atom}.
@@ -42,16 +43,16 @@ stop(_MnesiaState) ->
     ok.
 
 -spec save(Uid :: binary(), ObjState :: any(), Storage :: atom(), MnesiaState :: mnesia_state()) -> {ok, saved}.
-save(Uid, ObjState, Storage, _MnesiaState) ->
-    Record = #object_store{uid = Uid, obj_state = ObjState},
+save(Uid, ObjState, _Storage, _MnesiaState) ->
+    Record = #nxtfr_object_store{uid = Uid, obj_state = ObjState},
     F = fun() -> mnesia:write(Record) end,
     {atomic, ok} = mnesia:transaction(F),
     {ok, saved}.
 
 -spec load(Uid :: binary(), Storage :: atom(), MnesiaState :: mnesia_state()) -> {ok, ObjState :: any()}.
-load(Uid, Storage, #mnesia_state{}) ->
+load(Uid, _Storage, #mnesia_state{}) ->
     F = fun() -> mnesia:read({object_store, Uid}) end,
     case mnesia:transaction(F) of
-        {atomic, [#object_store{obj_state = ObjState}]} -> {ok, ObjState};
+        {atomic, [#nxtfr_object_store{obj_state = ObjState}]} -> {ok, ObjState};
         {atomic, []} -> {error, not_found}
     end.
