@@ -51,7 +51,7 @@ save(Uid, ObjState, _Storage, _MnesiaState) ->
 
 -spec load(Uid :: binary(), Storage :: atom(), MnesiaState :: mnesia_state()) -> {ok, ObjState :: any()}.
 load(Uid, _Storage, #mnesia_state{}) ->
-    F = fun() -> mnesia:read({object_store, Uid}) end,
+    F = fun() -> mnesia:read({nxtfr_object_store, Uid}) end,
     case mnesia:transaction(F) of
         {atomic, [#nxtfr_object_store{obj_state = ObjState}]} -> {ok, ObjState};
         {atomic, []} -> {error, not_found}
