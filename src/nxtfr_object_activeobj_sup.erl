@@ -21,7 +21,7 @@ init([]) ->
                  intensity => 10,
                  period => 1},
 
-    {ok, ActiveObjectModule} = application:get_env(nxtfr_object, active_object_module, nxtfr_gen_object),
+    ActiveObjectModule = application:get_env(nxtfr_object, active_object_module, nxtfr_gen_object),
 
     NxtfrObjectActiveObj = #{
         id => ActiveObjectModule,
