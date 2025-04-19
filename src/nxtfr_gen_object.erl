@@ -34,7 +34,7 @@ handle_event(Pid, Event) ->
     Pid ! {handle_event, Event}.
 
 handle_sync_event(Pid, Event) ->
-    handle_sync_event(Pid, Event, 10000).    
+    handle_sync_event(Pid, Event, 10000).
 
 handle_sync_event(Pid, Event, Timeout) ->
     Ref = make_ref(),
