@@ -17,17 +17,17 @@
 
 %% Interal exports
 -export([
-    loop/5,
+    loop/6,
     tick/5]).
 
--callback start_link(Uid :: binary(), CallbackModule :: atom(), ObjState :: any(), Registry :: atom(), State :: any()) -> {ok, Pid :: pid()}.
+-callback start_link(Uid :: binary(), CallbackModule :: atom(), ObjState :: any(), TickFrequency :: integer()) -> {ok, Pid :: pid()}.
 -callback handle_event(LastTick :: integer(), ObjState :: any(), State :: any()) -> {ok, NewState :: any()}.
 -callback handle_tick(LastTick :: integer(), DeltaTime :: integer(), ObjState :: any(), State :: any()) -> {ok, NewState :: any()}.
 -callback handle_sync_event(Event :: any(), ObjState :: any(), State :: any()) -> {ok, Reply :: any(), NewState :: any()} | {error, timeout}.
 -callback stop(ObjState :: any(), State :: any()) -> ok.
 
-start_link(Module, ObjState, State, TickFrequency) ->
-    Pid = spawn_link(?MODULE, loop, [Module, ObjState, State, TickFrequency, timestamp()]),
+start_link(Uid, CallbackModule, ObjState, TickFrequency) ->
+    Pid = spawn_link(?MODULE, loop, [Uid, CallbackModule, ObjState, TickFrequency, timestamp()]),
     {ok, Pid}.
 
 handle_event(Pid, Event) ->
@@ -48,38 +48,38 @@ handle_sync_event(Pid, Event, Timeout) ->
 stop(Pid) ->
     Pid ! stop.
 
-loop(Module, ObjState, State, TickFrequency, LastTick) ->
+loop(Uid, CallbackModule, ObjState, TickState, TickFrequency, LastTick) ->
     TimeUntilNextTick = time_until_next_tick(TickFrequency, LastTick),
     receive
         {handle_event, Event} ->
-            {ok, NewObjState, NewState} = Module:handle_event(Event, ObjState, State),
-            {ok, NewObjState2, TickedState, NewLastTick} = tick(Module, NewObjState, NewState, TickFrequency, LastTick),
-            nxtfr_gen_object:loop(Module, NewObjState2, TickedState, TickFrequency, NewLastTick);
+            {ok, NewObjState} = CallbackModule:handle_event(Event, ObjState, TickState),
+            {ok, NewObjState2, TickedState, NewLastTick} = tick(CallbackModule, NewObjState, TickState, TickFrequency, LastTick),
+            nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, TickedState, TickFrequency, NewLastTick);
         {handle_sync_event, From, Event, Ref} ->
-            {ok, Reply, NewObjState, NewState} = Module:handle_sync_event(Event, ObjState, State),
+            {ok, Reply, NewObjState, NewTickState} = CallbackModule:handle_sync_event(Event, ObjState, TickState),
             From ! {Ref, Reply},
-            {ok, NewObjState2, TickedState, NewLastTick} = tick(Module, NewObjState, NewState, TickFrequency, LastTick),
-            nxtfr_gen_object:loop(Module, NewObjState2, TickedState, TickFrequency, NewLastTick);
+            {ok, NewObjState2, TickedState, NewLastTick} = tick(CallbackModule, NewObjState, NewTickState, TickFrequency, LastTick),
+            nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, TickedState, TickFrequency, NewLastTick);
         stop ->
-            Module:stop(ObjState, State);
+            CallbackModule:stop(ObjState, TickState);
         Info ->
-            {ok, NewObjState, NewState} = Module:handle_info(Info, ObjState, State),
-            {ok, NewObjState2, TickedState, NewLastTick} = tick(Module, NewObjState, NewState, TickFrequency, LastTick),
-            nxtfr_gen_object:loop(Module, NewObjState2, TickedState, TickFrequency, NewLastTick)
+            {ok, NewObjState, NewTickState} = CallbackModule:handle_info(Info, ObjState, TickState),
+            {ok, NewObjState2, TickedState, NewLastTick} = tick(CallbackModule, NewObjState, NewTickState, TickFrequency, LastTick),
+            nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, TickedState, TickFrequency, NewLastTick)
     after TimeUntilNextTick ->
-        {ok, NewObjState, TickedState, NewLastTick} = tick(Module, ObjState, State, TickFrequency, LastTick),
-        nxtfr_gen_object:loop(Module, NewObjState, TickedState, TickFrequency, NewLastTick)
+        {ok, NewObjState, TickedState, NewLastTick} = tick(CallbackModule, ObjState, TickState, TickFrequency, LastTick),
+        nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState, TickedState, TickFrequency, NewLastTick)
     end.
         
-tick(Module, ObjState, State, TickFrequency, LastTick) ->
+tick(CallbackModule, ObjState, TickState, TickFrequency, LastTick) ->
     Now = timestamp(),
     DeltaTime = Now - LastTick,
     case DeltaTime > TickFrequency of
         true -> 
-            {ok, NewObjState, NewState} = Module:handle_tick(LastTick, DeltaTime, ObjState, State),
-            {ok, NewObjState, NewState, Now};
+            {ok, NewObjState} = CallbackModule:handle_tick(LastTick, DeltaTime, ObjState, TickState),
+            {ok, NewObjState, Now};
         false ->
-            {ok, ObjState, State, LastTick}
+            {ok, ObjState, LastTick}
     end.
 
 time_until_next_tick(TickFrequency, LastTick) ->
