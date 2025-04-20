@@ -450,7 +450,7 @@ init_tick_procs('$end_of_table') ->
     done;
 
 init_tick_procs(Key) ->
-    case mnesia:wait_for_tables(?TICK_LOOKUP_TABLE, 10000) of
+    case mnesia:wait_for_tables([?TICK_LOOKUP_TABLE], 10000) of
         {timeout, _RemaingTables} ->
             error_logger:error_report({?MODULE, "Missing Mnesia tables, please call create cluster to create them", ?TICK_LOOKUP_TABLE});
         ok ->
