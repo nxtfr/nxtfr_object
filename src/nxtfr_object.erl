@@ -450,6 +450,7 @@ init_tick_procs('$end_of_table') ->
     done;
 
 init_tick_procs(Key) ->
+    mnesia:wait_for_tables(?TICK_LOOKUP_TABLE, 10000),
     [#tick_lookup{frequency = TickFrequency, table_name = TableName}] = mnesia:dirty_read(
         ?TICK_LOOKUP_TABLE, Key),
     start_tick_proc(TableName, TickFrequency),
