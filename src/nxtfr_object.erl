@@ -161,7 +161,7 @@ handle_call({register, Uid, CallbackModule, TickFrequency, ObjState, Registry}, 
                 false ->
                     pass;
                 true ->
-                    set_tick_frequency(Uid, Pid, TickFrequency, CallbackModule, Registry)
+                    set_tick_frequency(Uid, Pid, CallbackModule, TickFrequency, Registry)
             end,
             {reply, ok, State};
         {error, registry_not_found} -> {reply, {error, registry_not_found}, State};
