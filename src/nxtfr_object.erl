@@ -450,11 +450,15 @@ init_tick_procs('$end_of_table') ->
     done;
 
 init_tick_procs(Key) ->
-    mnesia:wait_for_tables(?TICK_LOOKUP_TABLE, 10000),
-    [#tick_lookup{frequency = TickFrequency, table_name = TableName}] = mnesia:dirty_read(
-        ?TICK_LOOKUP_TABLE, Key),
-    start_tick_proc(TableName, TickFrequency),
-    init_tick_procs(mnesia:dirty_next(?TICK_LOOKUP_TABLE, Key)).
+    case mnesia:wait_for_tables(?TICK_LOOKUP_TABLE, 10000) of
+        {timeout, _RemaingTables} ->
+            error_logger:error_report({?MODULE, "Missing Mnesia tables, please call create cluster to create them", ?TICK_LOOKUP_TABLE});
+        ok ->
+            [#tick_lookup{frequency = TickFrequency, table_name = TableName}] = mnesia:dirty_read(
+                ?TICK_LOOKUP_TABLE, Key),
+            start_tick_proc(TableName, TickFrequency),
+            init_tick_procs(mnesia:dirty_next(?TICK_LOOKUP_TABLE, Key))
+    end.
 
 start_tick_proc(TableName, TickFrequency) ->
     TickProc = nxtfr_object_tick_proc:start(TickFrequency, TableName),
