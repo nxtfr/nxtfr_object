@@ -161,7 +161,7 @@ handle_call({register, Uid, CallbackModule, TickFrequency, ObjState, Registry}, 
                 false ->
                     pass;
                 true ->
-                    set_tick_frequency(Uid, Pid, TickFrequency, Registry)
+                    set_tick_frequency(Uid, Pid, TickFrequency, CallbackModule, Registry)
             end,
             {reply, ok, State};
         {error, registry_not_found} -> {reply, {error, registry_not_found}, State};
@@ -414,15 +414,20 @@ set_tick_frequency(Uid, Pid, TickFrequency, Registry) ->
     case mnesia:dirty_read(?TICK_LOOKUP_TABLE, TickFrequency) of
         [] ->
             TableName = frequency_to_table_id(TickFrequency),
-            mnesia:create_table(TableName, [
-                {local_content, true},
-                {disc_copies, [node()]},
-                {record_name, tick_obj},
-                {attributes, record_info(fields, tick_obj)}]),
-            start_tick_proc(TableName, TickFrequency),
+            create_tick_table(TableName, TickFrequency),
             mnesia:dirty_write(TableName, #tick_obj{uid = Uid, pid = Pid, registry = Registry});
         [#tick_lookup{frequency = TickFrequency, table_name = TableName}] ->
             mnesia:dirty_write(TableName, #tick_obj{uid = Uid, pid = Pid, registry = Registry})
+    end.
+
+set_tick_frequency(Uid, Pid, CallbackModule, TickFrequency, Registry) ->
+    case mnesia:dirty_read(?TICK_LOOKUP_TABLE, TickFrequency) of
+        [] ->
+            TableName = frequency_to_table_id(TickFrequency),
+            create_tick_table(TableName, TickFrequency),
+            mnesia:dirty_write(TableName, #tick_obj{uid = Uid, pid = Pid, callback_module = CallbackModule, registry = Registry});
+         [#tick_lookup{frequency = TickFrequency, table_name = TableName}] ->
+            mnesia:dirty_write(TableName, #tick_obj{uid = Uid, pid = Pid, callback_module = CallbackModule, registry = Registry})
     end.
 
 unset_tick_frequency(Uid, TickFrequency) ->
@@ -432,6 +437,14 @@ unset_tick_frequency(Uid, TickFrequency) ->
         [#tick_lookup{frequency = TickFrequency, table_name = TableName}] ->
             mnesia:dirty_delete(TableName, Uid)
     end.
+
+create_tick_table(TableName, TickFrequency) ->
+    mnesia:create_table(TableName, [
+        {local_content, true},
+        {disc_copies, [node()]},
+        {record_name, tick_obj},
+        {attributes, record_info(fields, tick_obj)}]),
+    start_tick_proc(TableName, TickFrequency).
 
 frequency_to_table_id(TickFrequency) ->
     list_to_atom("nxtfr_tick_frequency_" ++ integer_to_list(TickFrequency)).
@@ -452,7 +465,9 @@ init_tick_procs('$end_of_table') ->
 init_tick_procs(Key) ->
     case mnesia:wait_for_tables([?TICK_LOOKUP_TABLE], 10000) of
         {timeout, _RemaingTables} ->
-            error_logger:error_report({?MODULE, "Missing Mnesia tables, please call create cluster to create them", ?TICK_LOOKUP_TABLE});
+            error_logger:warning_msg(
+                "Timeout when waiting for table ~p, call nxtfr_object:create_cluster to create it.",
+                [?TICK_LOOKUP_TABLE]);
         ok ->
             [#tick_lookup{frequency = TickFrequency, table_name = TableName}] = mnesia:dirty_read(
                 ?TICK_LOOKUP_TABLE, Key),

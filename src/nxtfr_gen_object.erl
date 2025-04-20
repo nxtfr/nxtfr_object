@@ -53,30 +53,30 @@ loop(Uid, CallbackModule, ObjState, TickState, TickFrequency, LastTick) ->
     receive
         {handle_event, Event} ->
             {ok, NewObjState} = CallbackModule:handle_event(Event, ObjState, TickState),
-            {ok, NewObjState2, TickedState, NewLastTick} = tick(CallbackModule, NewObjState, TickState, TickFrequency, LastTick),
+            {ok, NewObjState2, TickedState, NewLastTick} = tick(Uid, CallbackModule, NewObjState, TickFrequency, LastTick),
             nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, TickedState, TickFrequency, NewLastTick);
         {handle_sync_event, From, Event, Ref} ->
-            {ok, Reply, NewObjState, NewTickState} = CallbackModule:handle_sync_event(Event, ObjState, TickState),
+            {ok, Reply, NewObjState} = CallbackModule:handle_sync_event(Event, ObjState, TickState),
             From ! {Ref, Reply},
-            {ok, NewObjState2, TickedState, NewLastTick} = tick(CallbackModule, NewObjState, NewTickState, TickFrequency, LastTick),
+            {ok, NewObjState2, TickedState, NewLastTick} = tick(Uid, CallbackModule, NewObjState, TickFrequency, LastTick),
             nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, TickedState, TickFrequency, NewLastTick);
         stop ->
             CallbackModule:stop(ObjState, TickState);
         Info ->
-            {ok, NewObjState, NewTickState} = CallbackModule:handle_info(Info, ObjState, TickState),
-            {ok, NewObjState2, TickedState, NewLastTick} = tick(CallbackModule, NewObjState, NewTickState, TickFrequency, LastTick),
+            {ok, NewObjState} = CallbackModule:handle_info(Info, ObjState, TickState),
+            {ok, NewObjState2, TickedState, NewLastTick} = tick(Uid, CallbackModule, NewObjState, TickFrequency, LastTick),
             nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, TickedState, TickFrequency, NewLastTick)
     after TimeUntilNextTick ->
-        {ok, NewObjState, TickedState, NewLastTick} = tick(CallbackModule, ObjState, TickState, TickFrequency, LastTick),
+        {ok, NewObjState, TickedState, NewLastTick} = tick(Uid, CallbackModule, ObjState, TickFrequency, LastTick),
         nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState, TickedState, TickFrequency, NewLastTick)
     end.
         
-tick(CallbackModule, ObjState, TickState, TickFrequency, LastTick) ->
+tick(Uid, CallbackModule, ObjState, TickFrequency, LastTick) ->
     Now = timestamp(),
     DeltaTime = Now - LastTick,
     case DeltaTime > TickFrequency of
         true -> 
-            {ok, NewObjState} = CallbackModule:handle_tick(LastTick, DeltaTime, ObjState, TickState),
+            {ok, NewObjState} = CallbackModule:tick(Uid, DeltaTime, ObjState),
             {ok, NewObjState, Now};
         false ->
             {ok, ObjState, LastTick}

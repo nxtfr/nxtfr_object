@@ -1,5 +1,5 @@
 -record(active_obj, {uid, pid, callback_module, tick_frequency, state}).
 -record(event_tracker, {uid, events_per_second = 0, last_event_at}).
--record(tick_obj, {uid, pid, registry}).
+-record(tick_obj, {uid, pid, callback_module, registry}).
 -record(tick_lookup, {frequency, table_name, tick_proc}).
 -record(state, {storage_module, storage_state, tick_frequency_tables, tick_procs}).
