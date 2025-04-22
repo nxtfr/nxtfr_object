@@ -9,14 +9,15 @@
 %% Behaviour exports
 -export([
     start_link/4,
-    handle_event/2,
-    handle_sync_event/2,
-    handle_sync_event/3,
+    send_event/2,
+    send_message/2,
+    send_message/3,
     stop/1
     ]).
 
 %% Interal exports
 -export([
+    loop/5,
     loop/6,
     tick/5]).
 
@@ -27,18 +28,18 @@
 -callback stop(ObjState :: any(), State :: any()) -> ok.
 
 start_link(Uid, CallbackModule, ObjState, TickFrequency) ->
-    Pid = spawn_link(?MODULE, loop, [Uid, CallbackModule, ObjState, TickFrequency, timestamp()]),
+    Pid = spawn_link(?MODULE, loop, [Uid, CallbackModule, ObjState, TickFrequency]),
     {ok, Pid}.
 
-handle_event(Pid, Event) ->
-    Pid ! {handle_event, Event}.
+send_event(Pid, Event) ->
+    Pid ! {event, Event}.
 
-handle_sync_event(Pid, Event) ->
-    handle_sync_event(Pid, Event, 10000).
+send_message(Pid, Event) ->
+    send_message(Pid, Event, 10000).
 
-handle_sync_event(Pid, Event, Timeout) ->
+send_message(Pid, Event, Timeout) ->
     Ref = make_ref(),
-    Pid ! {handle_sync_event, self(), Event, Ref},
+    Pid ! {message, self(), Event, Ref},
     receive 
         {Ref, Reply} -> Reply
     after 
@@ -48,23 +49,27 @@ handle_sync_event(Pid, Event, Timeout) ->
 stop(Pid) ->
     Pid ! stop.
 
+loop(Uid, CallbackModule, ObjState, TickState, TickFrequency) ->
+    {ok, NewObjState} = CallbackModule:start(Uid, ObjState),
+    loop(Uid, CallbackModule, NewObjState, TickState, TickFrequency, timestamp()).
+
 loop(Uid, CallbackModule, ObjState, TickState, TickFrequency, LastTick) ->
     TimeUntilNextTick = time_until_next_tick(TickFrequency, LastTick),
     receive
-        {handle_event, Event} ->
-            {ok, NewObjState} = CallbackModule:handle_event(Event, ObjState, TickState),
+        {event, Event} ->
+            {ok, NewObjState} = CallbackModule:on_event(Event, ObjState),
             {ok, NewObjState2, TickedState, NewLastTick} = tick(Uid, CallbackModule, NewObjState, TickFrequency, LastTick),
             nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, TickedState, TickFrequency, NewLastTick);
-        {handle_sync_event, From, Event, Ref} ->
-            {ok, Reply, NewObjState} = CallbackModule:handle_sync_event(Event, ObjState, TickState),
-            From ! {Ref, Reply},
+        {message, From, Message, Ref} ->
+            {ok, Reply, NewObjState} = CallbackModule:on_message(From, Message, ObjState),
             {ok, NewObjState2, TickedState, NewLastTick} = tick(Uid, CallbackModule, NewObjState, TickFrequency, LastTick),
+            pid ! {Ref, Reply},
             nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, TickedState, TickFrequency, NewLastTick);
         stop ->
             CallbackModule:stop(ObjState, TickState);
         Info ->
-            {ok, NewObjState} = CallbackModule:handle_info(Info, ObjState, TickState),
-            {ok, NewObjState2, TickedState, NewLastTick} = tick(Uid, CallbackModule, NewObjState, TickFrequency, LastTick),
+            error_logger:warning_msg("~p received unhandled message: ~p.", [Uid, Info]),
+            {ok, NewObjState2, TickedState, NewLastTick} = tick(Uid, CallbackModule, ObjState, TickFrequency, LastTick),
             nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, TickedState, TickFrequency, NewLastTick)
     after TimeUntilNextTick ->
         {ok, NewObjState, TickedState, NewLastTick} = tick(Uid, CallbackModule, ObjState, TickFrequency, LastTick),

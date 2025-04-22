@@ -18,6 +18,7 @@
     create_registry/2,
     join_registry/2,
     destroy_registry/1,
+    register/3,
     register/4,
     register/5,
     unregister/2,
@@ -67,7 +68,11 @@ join_registry(Node, Registry) ->
 destroy_registry(Registry) ->
     gen_server:call(?MODULE, {destroy_registry, Registry}).
 
--spec register(Uid :: binary(), CallbackModule :: any(), TickFrequency :: integer(), Registry :: atom()) -> {ok, registered} | {error, not_found} | {error, registry_not_found}.
+-spec register(Uid :: binary(), CallbackModule :: atom(), Registry :: atom()) -> {ok, registered} | {error, not_found} | {error, registry_not_found}.
+register(Uid, CallbackModule, Registry) ->
+    gen_server:call(?MODULE, {register, Uid, CallbackModule, 0, undefined, Registry}).
+
+-spec register(Uid :: binary(), CallbackModule :: atom(), TickFrequency :: integer(), Registry :: atom()) -> {ok, registered} | {error, not_found} | {error, registry_not_found}.
 register(Uid, CallbackModule, TickFrequency, Registry) ->
     gen_server:call(?MODULE, {register, Uid, CallbackModule, TickFrequency, undefined, Registry}).
 
@@ -153,15 +158,14 @@ handle_call({join_registry, Node, RegistryName}, _From, State) ->
     rpc:call(Node, mnesia, add_table_copy, [RegistryName, node(), ram_copies]),
     {reply, ok, State};
 
-handle_call({register, Uid, CallbackModule, TickFrequency, ObjState, Registry}, _From, State) ->
+handle_call({register, Uid, CallbackModule, TickFrequency, ObjState, Registry}, _From, State)
+        when is_binary(Uid), is_atom(CallbackModule), is_integer(TickFrequency) ->
     case write_registry(Uid, CallbackModule, TickFrequency, ObjState, Registry) of
         ok ->
             Pid = undefined,
-            case is_integer(TickFrequency) of
-                false ->
-                    pass;
-                true ->
-                    set_tick_frequency(Uid, Pid, CallbackModule, TickFrequency, Registry)
+           case TickFrequency of
+                0 -> pass;
+                _ -> set_tick_frequency(Uid, Pid, CallbackModule, TickFrequency, Registry)
             end,
             {reply, ok, State};
         {error, registry_not_found} -> {reply, {error, registry_not_found}, State};
