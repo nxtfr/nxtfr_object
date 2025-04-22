@@ -445,7 +445,7 @@ unset_tick_frequency(Uid, TickFrequency) ->
 create_tick_table(TableName, TickFrequency) ->
     mnesia:create_table(TableName, [
         {local_content, true},
-        {disc_copies, [node()]},
+        {ram_copies, [node()]},
         {record_name, tick_obj},
         {attributes, record_info(fields, tick_obj)}]),
     start_tick_proc(TableName, TickFrequency).
