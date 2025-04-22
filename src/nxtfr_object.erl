@@ -454,13 +454,20 @@ frequency_to_table_id(TickFrequency) ->
     list_to_atom("nxtfr_tick_frequency_" ++ integer_to_list(TickFrequency)).
 
 init_tick_procs() ->
-    case lists:member(?TICK_LOOKUP_TABLE, mnesia:system_info(tables)) of
-        true ->
-            init_tick_procs(mnesia:dirty_first(?TICK_LOOKUP_TABLE));
-        false ->
+    case mnesia:wait_for_tables([?TICK_LOOKUP_TABLE], 10000) of
+        {timeout, _RemaingTables} ->
             error_logger:warning_msg(
-                "Table ~p not found during init, call nxtfr_object:create_cluster to create it.",
-                [?TICK_LOOKUP_TABLE])
+                "Timeout when waiting for table ~p, call nxtfr_object:create_cluster to create it.",
+                [?TICK_LOOKUP_TABLE]);
+        ok ->
+            case lists:member(?TICK_LOOKUP_TABLE, mnesia:system_info(tables)) of
+                true ->
+                    init_tick_procs(mnesia:dirty_first(?TICK_LOOKUP_TABLE));
+            false ->
+                error_logger:warning_msg(
+                    "Table ~p not found during init, call nxtfr_object:create_cluster to create it.",
+                    [?TICK_LOOKUP_TABLE])
+            end
     end.
 
 init_tick_procs('$end_of_table') ->
