@@ -57,11 +57,11 @@ loop(Uid, CallbackModule, ObjState, Registry, TickFrequency, LastTick) ->
     TimeUntilNextTick = time_until_next_tick(TickFrequency, LastTick),
     receive
         {event, Event} ->
-            {ok, NewObjState} = CallbackModule:on_event(Event, ObjState),
+            {ok, NewObjState} = CallbackModule:on_event(Uid, Event, ObjState),
             {ok, NewObjState2, NewLastTick} = tick(Uid, CallbackModule, NewObjState, TickFrequency, LastTick),
             nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, Registry, TickFrequency, NewLastTick);
         {message, From, Message, Ref} ->
-            {ok, Reply, NewObjState} = CallbackModule:on_message(From, Message, ObjState),
+            {ok, Reply, NewObjState} = CallbackModule:on_message(Uid, From, Message, ObjState),
             {ok, NewObjState2, NewLastTick} = tick(Uid, CallbackModule, NewObjState, TickFrequency, LastTick),
             pid ! {Ref, Reply},
             nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, Registry, TickFrequency, NewLastTick);
