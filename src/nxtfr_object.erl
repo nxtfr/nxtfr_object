@@ -532,9 +532,9 @@ dispatch_event(Key, Event, Registry) ->
     case mnesia:dirty_read({Registry, Key}) of
         [] ->
             ok;
-        [#tick_obj{uid = Uid, pid = undefined, callback_module = CallbackModule}] ->
+        [#active_obj{uid = Uid, pid = undefined, callback_module = CallbackModule}] ->
             CallbackModule:on_event(Uid, Event);
-        [#tick_obj{pid = Pid}] ->
+        [#active_obj{pid = Pid}] ->
             Pid ! {event, Event}
     end,
     nxtfr_object:dispatch_event(mnesia:dirty_next(Registry, Key), Event, Registry).
