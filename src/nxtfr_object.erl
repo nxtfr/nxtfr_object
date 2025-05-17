@@ -32,6 +32,11 @@
     send_event/2,
     send_request/3]).
 
+%% Internal exports
+-export([
+    dispatch_event/3
+    ]).
+
 %% gen_server callbacks
 -export([
     init/1,
@@ -115,11 +120,24 @@ deactivate(Uid, Registry) ->
 
 -spec send_event(Event :: any(), Registry :: atom()) -> {ok | {error, registry_not_found}}.
 send_event(Event, Registry) ->
-    gen_server:call(?MODULE, {send_event, Event, Registry}).
+    gen_server:cast(?MODULE, {send_event, Event, Registry}).
 
 -spec send_request(Uid :: binary(), Event :: any(), Registry :: atom()) -> {ok | {error, not_found} | {error, registry_not_found}}.
 send_request(Uid, Event, Registry) ->
-    gen_server:call(?MODULE, {send_request, Uid, Event, Registry}).
+    Ref = make_ref(),
+    gen_server:cast(?MODULE, {send_request, Uid, Event, Registry, self(), Ref}),
+    wait_for_response(Ref).
+
+-spec wait_for_response(Ref :: reference()) -> {ok, Response :: any()} | {error, timeout}.
+wait_for_response(Ref) ->
+    receive
+        {Ref, Response} -> {ok, Response};
+        Response ->
+            error_logger:error_report({send_request, "Unexpected response", Response}),
+            wait_for_response(Ref)
+    after 10000 ->
+        {error, timeout}
+    end.
 
 -spec init([]) -> {ok, []}.
 init([]) ->
@@ -254,21 +272,25 @@ handle_call({deactivate, Uid, Registry}, _From, State) ->
     ok = deactivate_object(Uid, Registry),
     {reply, ok, State};
 
-handle_call({send_event, Event, Registry}, _From, State) ->
+handle_call(Call, _From, State) ->
+    error_logger:error_report([{undefined_call, Call}]),
+    {reply, ok, State}.
+
+handle_cast({send_event, Event, Registry}, State) ->
     case mnesia:dirty_first(Registry) of
         {aborted, {no_exists, _Record}} ->
-            {reply, {error, registry_not_found}, State};
+            {noreply, State};
         FirstKey ->
-            ok = dispatch_event(FirstKey, Event, Registry),
-            {reply, ok, State}
+            spawn(nxtfr_object, dispatch_event, [FirstKey, Event, Registry]),
+            {noreply, State}
     end;
 
-handle_call({send_request, Uid, Request, Registry}, _From, State) ->
+handle_cast({send_request, Uid, Request, Registry, From, Ref}, State) ->
     try mnesia:dirty_read(Registry, Uid) of
         [#active_obj{pid = Pid}] ->
             case is_object_alive(Pid) of
                 true ->
-                    Pid ! {request, Request},
+                    Pid ! {request, Request, From, Ref},
                     {reply, ok, State};
                 false ->
                     case activate_object(Uid, Registry, State) of
@@ -286,10 +308,6 @@ handle_call({send_request, Uid, Request, Registry}, _From, State) ->
     catch
         aborted:Reason -> {reply, {error, Reason}, State}
     end;
-
-handle_call(Call, _From, State) ->
-    error_logger:error_report([{undefined_call, Call}]),
-    {reply, ok, State}.
 
 handle_cast(Cast, State) ->
     error_logger:error_report([{undefined_cast, Cast}]),
@@ -519,4 +537,4 @@ dispatch_event(Key, Event, Registry) ->
         [#tick_obj{pid = Pid}] ->
             Pid ! {event, Event}
     end,
-    dispatch_event(mnesia:dirty_next(Registry, Key), Event, Registry).
+    nxtfr_object:dispatch_event(mnesia:dirty_next(Registry, Key), Event, Registry).

@@ -60,10 +60,10 @@ loop(Uid, CallbackModule, ObjState, Registry, TickFrequency, LastTick) ->
             {ok, NewObjState} = CallbackModule:on_event(Uid, Event, ObjState),
             {ok, NewObjState2, NewLastTick} = tick(Uid, CallbackModule, NewObjState, TickFrequency, LastTick),
             nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, Registry, TickFrequency, NewLastTick);
-        {message, From, Message, Ref} ->
-            {ok, Reply, NewObjState} = CallbackModule:on_message(Uid, From, Message, ObjState),
+        {request, Request, From, Ref} ->
+            {ok, Response, NewObjState} = CallbackModule:on_request(Uid, From, Request, ObjState),
             {ok, NewObjState2, NewLastTick} = tick(Uid, CallbackModule, NewObjState, TickFrequency, LastTick),
-            pid ! {Ref, Reply},
+            From ! {Ref, Response},
             nxtfr_gen_object:loop(Uid, CallbackModule, NewObjState2, Registry, TickFrequency, NewLastTick);
         stop ->
             CallbackModule:stop(Uid, ObjState);
