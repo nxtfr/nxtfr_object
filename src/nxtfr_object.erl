@@ -29,7 +29,8 @@
     activate/2,
     activate/3,
     deactivate/2,
-    send_event/3]).
+    send_event/2,
+    send_request/3]).
 
 %% gen_server callbacks
 -export([
@@ -112,9 +113,13 @@ activate(Uid, Registry, DeepState) ->
 deactivate(Uid, Registry) ->
     gen_server:call(?MODULE, {deactivate, Uid, Registry}).
 
--spec send_event(Uid :: binary(), Event :: any(), Registry :: atom()) -> {ok | {error, not_found} | {error, registry_not_found}}.
-send_event(Uid, Event, Registry) ->
-    gen_server:call(?MODULE, {send_event, Uid, Event, Registry}).
+-spec send_event(Event :: any(), Registry :: atom()) -> {ok | {error, registry_not_found}}.
+send_event(Event, Registry) ->
+    gen_server:call(?MODULE, {send_event, Event, Registry}).
+
+-spec send_request(Uid :: binary(), Event :: any(), Registry :: atom()) -> {ok | {error, not_found} | {error, registry_not_found}}.
+send_request(Uid, Event, Registry) ->
+    gen_server:call(?MODULE, {send_request, Uid, Event, Registry}).
 
 -spec init([]) -> {ok, []}.
 init([]) ->
@@ -249,17 +254,26 @@ handle_call({deactivate, Uid, Registry}, _From, State) ->
     ok = deactivate_object(Uid, Registry),
     {reply, ok, State};
 
-handle_call({send_event, Uid, Event, Registry}, _From, State) ->
+handle_call({send_event, Event, Registry}, _From, State) ->
+    case mnesia:dirty_first(Registry) of
+        {aborted, {no_exists, _Record}} ->
+            {reply, {error, registry_not_found}, State};
+        FirstKey ->
+            ok = dispatch_event(FirstKey, Event, Registry),
+            {reply, ok, State}
+    end;
+
+handle_call({send_request, Uid, Request, Registry}, _From, State) ->
     try mnesia:dirty_read(Registry, Uid) of
         [#active_obj{pid = Pid}] ->
             case is_object_alive(Pid) of
                 true ->
-                    Pid ! Event,
+                    Pid ! {request, Request},
                     {reply, ok, State};
                 false ->
                     case activate_object(Uid, Registry, State) of
                         {atomic, NewPid} ->
-                            NewPid ! Event,
+                            NewPid ! Request,
                             {reply, ok, State};
                         {aborted, {no_exists, _Record}} ->
                             {reply, {error, registry_not_found}, State}
@@ -492,3 +506,17 @@ start_tick_proc(TableName, TickFrequency) ->
         frequency = TickFrequency,
         table_name = TableName,
         tick_proc = TickProc}).
+
+dispatch_event('$end_of_table', _Event, _Registry) ->
+    ok;
+
+dispatch_event(Key, Event, Registry) ->
+    case mnesia:dirty_read({my_table, Key}) of
+        [] ->
+            ok;
+        [#tick_obj{uid = Uid, pid = undefined, callback_module = CallbackModule}] ->
+            CallbackModule:on_event(Uid, Event);
+        [#tick_obj{pid = Pid}] ->
+            Pid ! {event, Event}
+    end,
+    dispatch_event(mnesia:dirty_next(Registry, Key), Event, Registry).
