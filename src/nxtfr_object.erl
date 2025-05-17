@@ -529,7 +529,7 @@ dispatch_event('$end_of_table', _Event, _Registry) ->
     ok;
 
 dispatch_event(Key, Event, Registry) ->
-    case mnesia:dirty_read({my_table, Key}) of
+    case mnesia:dirty_read({Registry, Key}) of
         [] ->
             ok;
         [#tick_obj{uid = Uid, pid = undefined, callback_module = CallbackModule}] ->
