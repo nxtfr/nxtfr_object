@@ -9,9 +9,6 @@
 %% Behaviour exports
 -export([
     start_link/5,
-    send_event/2,
-    send_message/2,
-    send_message/3,
     stop/1
     ]).
 
@@ -30,21 +27,6 @@
 start_link(Uid, CallbackModule, ObjState, Registry, TickFrequency) ->
     Pid = spawn_link(?MODULE, loop, [Uid, CallbackModule, ObjState, Registry, TickFrequency]),
     {ok, Pid}.
-
-send_event(Pid, Event) ->
-    Pid ! {event, Event}.
-
-send_message(Pid, Event) ->
-    send_message(Pid, Event, 10000).
-
-send_message(Pid, Event, Timeout) ->
-    Ref = make_ref(),
-    Pid ! {message, self(), Event, Ref},
-    receive 
-        {Ref, Reply} -> Reply
-    after 
-        Timeout -> {error, timeout}
-    end.
 
 stop(Pid) ->
     Pid ! stop.
