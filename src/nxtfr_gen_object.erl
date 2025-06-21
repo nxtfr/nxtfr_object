@@ -61,7 +61,7 @@ loop(Uid, CallbackModule, ObjState, Registry, TickFrequency, LastTick) ->
 tick(Uid, CallbackModule, ObjState, TickFrequency, LastTick) ->
     Now = timestamp(),
     DeltaTime = Now - LastTick,
-    case DeltaTime > TickFrequency of
+    case DeltaTime >= TickFrequency of
         true -> 
             {ok, NewObjState} = CallbackModule:tick(Uid, DeltaTime, ObjState),
             {ok, NewObjState, Now};
@@ -70,10 +70,10 @@ tick(Uid, CallbackModule, ObjState, TickFrequency, LastTick) ->
     end.
 
 time_until_next_tick(TickFrequency, LastTick) ->
-    Time = timestamp() - (LastTick + TickFrequency),
-    case Time < 0 of
+    TimeUntilNextTick = (LastTick + TickFrequency) - timestamp(),
+    case TimeUntilNextTick =< 0 of
         true -> 0;
-        false -> Time
+        false -> TimeUntilNextTick
     end.
 
 timestamp() ->

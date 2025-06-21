@@ -22,6 +22,7 @@ init([]) ->
                  period => 1},
 
     ActiveObjectModule = application:get_env(nxtfr_object, active_object_module, nxtfr_gen_object),
+    io:format("~p: Using active object module: ~p~n", [?MODULE, ActiveObjectModule]),
 
     NxtfrObjectActiveObj = #{
         id => ActiveObjectModule,

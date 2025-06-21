@@ -11,7 +11,7 @@
     {riak_options, [{host, "127.0.0.1"}, {port, 8087}, {queue_if_disconnected, true}]},
     {mnesia_options, []},
     {storage_module, nxtfr_object_mnesia},
-    {active_object_module, undefined}
+    {active_object_module, nxtfr_gen_object}
   ]},
   {modules, []},
   {licenses, ["MIT"]},
